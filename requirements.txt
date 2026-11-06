@@ -3,6 +3,8 @@
 pymupdf==1.28.2
 numpy==2.5.4
 opencv-python-headless==5.0.0.93
+openpyxl==3.1.5
+pywin32==312
 winrt-runtime==4.1.0
 winrt-Windows.Foundation==4!10.0.28000.2957
 winrt-Windows.Foundation.Collections==4!10.0.28000.2957
