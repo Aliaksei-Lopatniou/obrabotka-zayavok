@@ -1,0 +1,12 @@
+# Python 3.12+ (проверено на 3.15), Windows 10/11 с установленным русским языком (OCR)
+# tkinter входит в стандартную поставку Python
+pymupdf==1.28.2
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+winrt-runtime==4.1.0
+winrt-Windows.Foundation==4!10.0.28000.2957
+winrt-Windows.Foundation.Collections==4!10.0.28000.2957
+winrt-Windows.Globalization==4!10.0.28000.2957
+winrt-Windows.Graphics.Imaging==4!10.0.28000.2957
+winrt-Windows.Media.Ocr==4!10.0.28000.2957
+winrt-Windows.Storage.Streams==4!10.0.28000.2957
