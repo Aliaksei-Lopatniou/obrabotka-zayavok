@@ -1,17 +1,51 @@
-"""Перечни материалов по видам работ (Excel-файлы в папке «шаблоны»)."""
+"""Перечни материалов по видам работ (Excel-файлы, выбранные вручную или из папки «шаблоны»)."""
+import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import openpyxl
 
-TEMPLATES_DIR = Path(__file__).resolve().parent / "шаблоны"
+APP_DIR = Path(__file__).resolve().parent
+TEMPLATES_DIR = APP_DIR / "шаблоны"
+SETTINGS_FILE = APP_DIR / "настройки.json"  # в git не попадает (*.json)
 
-# Вид работ → файл стандартного перечня. Нет файла — перечень пустой.
+# Вид работ → файл стандартного перечня по умолчанию. Нет файла — перечень пустой.
 WORK_TYPES: dict[str, str] = {
     "Установка": "материалы(установка).xlsx",
     "Переустановка": "материалы(переустановка).xlsx",
     "Ремонт": "материалы(ремонт).xlsx",
 }
+
+
+def _load_settings() -> dict:
+    try:
+        return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_settings(settings: dict) -> None:
+    SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=2),
+                             encoding="utf-8")
+
+
+def material_file(work_type: str) -> Path:
+    """Файл перечня для вида работ: выбранный вручную, иначе стандартный из «шаблоны»."""
+    chosen = _load_settings().get("material_files", {}).get(work_type)
+    if chosen:
+        return Path(chosen)
+    return TEMPLATES_DIR / WORK_TYPES.get(work_type, "")
+
+
+def set_material_file(work_type: str, path: Path | None) -> None:
+    """Запоминает выбранный файл перечня (None — вернуться к файлу из «шаблоны»)."""
+    settings = _load_settings()
+    files = settings.setdefault("material_files", {})
+    if path is None:
+        files.pop(work_type, None)
+    else:
+        files[work_type] = str(path)
+    _save_settings(settings)
 
 
 @dataclass
@@ -65,7 +99,7 @@ def load_materials_xlsx(path: Path) -> list[Material]:
 
 
 def default_materials(work_type: str) -> list[Material]:
-    path = TEMPLATES_DIR / WORK_TYPES.get(work_type, "")
+    path = material_file(work_type)
     if not path.is_file():
         return []
     return [replace(m) for m in load_materials_xlsx(path)]

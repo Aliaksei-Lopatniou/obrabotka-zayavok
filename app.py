@@ -10,7 +10,8 @@ from tkinter import filedialog, messagebox, ttk
 
 import pymupdf
 
-from materials import WORK_TYPES, Material, catalog, default_materials, format_qty
+from materials import (WORK_TYPES, Material, catalog, default_materials,
+                       format_qty, load_materials_xlsx, material_file, set_material_file)
 from report import ReportError, build_report
 from request_parser import FIELDS, parse_request
 
@@ -166,6 +167,24 @@ class App(tk.Tk):
                                     command=self._reset_materials)
         self.reset_btn.pack(side="right")
 
+        files = ttk.LabelFrame(tab, text="Файлы перечней материалов (Excel)", padding=(8, 4))
+        files.pack(fill="x", pady=(8, 0))
+        files.columnconfigure(1, weight=1)
+        self.file_vars: dict[str, tk.StringVar] = {}
+        for row, wt in enumerate(WORK_TYPES):
+            ttk.Label(files, text=f"{wt}:").grid(row=row, column=0, sticky="w", pady=2)
+            var = tk.StringVar()
+            ttk.Label(files, textvariable=var, foreground="#555").grid(
+                row=row, column=1, sticky="w", padx=6)
+            ttk.Button(files, text="Обзор…",
+                       command=lambda wt=wt: self._browse_material_file(wt)).grid(
+                row=row, column=2, padx=(0, 4))
+            ttk.Button(files, text="✕", style="Small.TButton",
+                       command=lambda wt=wt: self._clear_material_file(wt)).grid(
+                row=row, column=3)
+            self.file_vars[wt] = var
+        self._refresh_file_labels()
+
         self.mat_info = tk.StringVar()
         ttk.Label(tab, textvariable=self.mat_info, foreground="#a05000",
                   wraplength=600).pack(fill="x", pady=(6, 0))
@@ -260,6 +279,52 @@ class App(tk.Tk):
         self._mark_dirty()
         self._render_materials()
 
+    def _refresh_file_labels(self) -> None:
+        for wt, var in self.file_vars.items():
+            path = material_file(wt)
+            if path.is_file():
+                var.set(str(path))
+            else:
+                var.set(f"не выбран ({path.name} не найден)")
+
+    def _browse_material_file(self, work_type: str) -> None:
+        current = material_file(work_type)
+        start = current.parent if current.parent.is_dir() else Path.home()
+        p = filedialog.askopenfilename(
+            title=f"Перечень материалов: {work_type}", initialdir=str(start),
+            filetypes=[("Excel", "*.xlsx *.xlsm"), ("Все файлы", "*.*")])
+        if not p:
+            return
+        path = Path(p)
+        try:
+            items = load_materials_xlsx(path)
+        except Exception as exc:
+            messagebox.showerror("Перечень материалов", f"Не удалось прочитать файл:\n{path}\n\n{exc}")
+            return
+        if not items and not messagebox.askyesno(
+                "Перечень материалов",
+                "В файле не найдено ни одного материала (ожидается форма «Приложение к отчёту» "
+                "со строкой нумерации колонок 1, 2, 3…).\nВсё равно использовать этот файл?"):
+            return
+        set_material_file(work_type, path)
+        self._material_file_changed(work_type)
+
+    def _clear_material_file(self, work_type: str) -> None:
+        set_material_file(work_type, None)
+        self._material_file_changed(work_type)
+
+    def _material_file_changed(self, work_type: str) -> None:
+        """Перечитывает перечень: обновляет каталог и заявки, где материалы не правились вручную."""
+        self._refresh_file_labels()
+        self.catalog = catalog()
+        self.add_combo.configure(values=[m.name for m in self.catalog])
+        for req in self.requests:
+            if req.work_type == work_type and not req.materials_edited:
+                req.materials = default_materials(work_type)
+        n = len(default_materials(work_type))
+        self.status.set(f"Перечень «{work_type}»: материалов {n}")
+        self._render_materials()
+
     def _materials_changed(self) -> None:
         if self.current:
             self.current.materials_edited = True
@@ -308,8 +373,8 @@ class App(tk.Tk):
         wt = req.work_type if req else self.work_type.get()
 
         if req and not items and not req.materials_edited:
-            self.mat_info.set(f"Для вида работ «{wt}» нет стандартного перечня "
-                              f"(файл шаблоны\\{WORK_TYPES[wt]}). Добавьте материалы вручную.")
+            self.mat_info.set(f"Для вида работ «{wt}» нет стандартного перечня. Выберите "
+                              f"Excel-файл кнопкой «Обзор…» или добавьте материалы вручную.")
         else:
             self.mat_info.set("Материалы с количеством 0 в отчёт не попадут." if items else "")
 
@@ -454,7 +519,7 @@ class App(tk.Tk):
             if self.progress.winfo_ismapped():
                 self.progress.stop()
                 self.progress.pack_forget()
-            if not self.status.get().startswith(("Сохранено", "Отчёт")):
+            if not self.status.get().startswith(("Сохранено", "Отчёт", "Перечень")):
                 self.status.set(f"Заявок: {len(self.requests)}" if self.requests
                                 else "Добавьте PDF-заявку")
 
